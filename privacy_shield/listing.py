@@ -49,6 +49,9 @@ def project_rows(doctype, rows, requested, physical, full=False, as_dict=True):
             elif not full and source in aliases:
                 if as_dict: continue
                 value = None
+            if not full:
+                from privacy_shield.display_text import FIELDS, mask_display
+                if source in FIELDS: value = mask_display(value)
             if as_dict: result[key] = value
             else: result.append(value)
         output.append(result)

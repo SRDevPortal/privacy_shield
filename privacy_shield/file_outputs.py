@@ -61,3 +61,24 @@ def download_file(file_url):
         from privacy_shield.report_outputs import check_attachment_urls
         check_attachment_urls([file_url])
     return original(file_url)
+
+
+@frappe.whitelist()
+def gst_download_file():
+    """Frappe v15-compatible tax attachment download with scoped preflight."""
+    from india_compliance.gst_india.doctype.gst_return_log.gst_return_log import get_file_doc
+
+    frappe.has_permission("GST Return Log", "read", throw=True)
+    args = frappe.form_dict
+    file = get_file_doc(args.get("doctype"), args.get("name"), args.get("file_field"))
+    if not file:
+        raise frappe.DoesNotExistError("Attachment not found")
+    file.check_permission("read")
+    if restricted():
+        checked_files([file.name])
+    # v15 readers (including the existing S3 wrapper) do not accept encodings.
+    # Core decodes UTF-8 text; re-encode it for the native download byte contract.
+    content = file.get_content()
+    frappe.response["filename"] = args.get("file_name") or file.file_name
+    frappe.response["filecontent"] = content.encode("utf-8") if isinstance(content, str) else content
+    frappe.response["type"] = "download"

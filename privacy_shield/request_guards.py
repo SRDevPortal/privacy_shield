@@ -1,7 +1,7 @@
-"""Pilot-only barrier for REST paths that bypass RPC adapters.
+"""Pilot REST barrier with a narrowly routed SDK preview-read exception.
 
-This is an explicit unsupported-route denial, not a REST masking adapter.
-Use the framework router itself to respect decoded paths and slash behavior.
+Core v1 document reads use the reviewed projection; latest-name lookups accept
+only the fixed SDK query. Other unsupported REST surfaces remain denied.
 """
 import frappe
 from werkzeug.exceptions import HTTPException
@@ -10,6 +10,7 @@ from privacy_shield.policy import current_capabilities
 
 
 def guard_rest():
+    frappe.local.privacy_preview_read = None
     if not frappe.conf.get("privacy_shield_desk_enabled", False):
         return
     request = getattr(frappe.local, "request", None)
@@ -30,6 +31,9 @@ def guard_rest():
     elif getattr(endpoint, "__name__", "") == "handle_rpc_call":
         return  # Ordinary RPC continues through the existing override mechanism.
     if not (enabled(dt) or (dt == "Contact Phone" and enabled("Contact"))):
+        return
+    from privacy_shield.rest_preview import route_preview_read
+    if route_preview_read(endpoint, arguments):
         return
     capabilities = current_capabilities()
     # Full visibility alone does not authorize writes; conservatively require both

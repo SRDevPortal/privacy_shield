@@ -20,10 +20,11 @@ def build_fields():
                 if owner != "Privacy Shield" or not existing.is_virtual:
                     frappe.throw(f"Privacy Shield field conflict: {doctype}.{target}")
             fields.setdefault(doctype, []).append(dict(
-                fieldname=target, label="Masked Mobile" if target == "mask_mobile" else "Masked Phone",
+                fieldname=target, label={"mask_mobile": "Masked Mobile", "mask_phone": "Masked Phone",
+                                         "mask_alternate_mobile": "Masked Alternate Mobile"}[target],
                 fieldtype="Data", insert_after=source, read_only=1, is_virtual=1,
                 options=virtual_expression(source), module="Privacy Shield",
-                no_copy=1, hidden=1, in_list_view=0,
+                no_copy=1, hidden=1, in_list_view=0, allow_on_submit=1,
                 permlevel=meta.get_field(source).permlevel or 0,
                 description="Display only. Visibility enforcement requires completed integration rollout.",
             ))

@@ -13,4 +13,7 @@ def project_numbers(payload, mapping, view_full=False, aliases=()):
     if not view_full:
         for alias in aliases:
             result.pop(alias, None)
+    if not view_full:
+        from privacy_shield.display_text import project_display
+        result = project_display(result)
     return result

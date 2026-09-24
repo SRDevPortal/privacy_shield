@@ -23,6 +23,8 @@ def evaluate(roles, rules, user=None):
 
 def current_capabilities(user=None):
     import frappe
+    # Frappe materializes Role Profile roles on User; use the native effective roles.
+    # Profile edits take effect after Frappe propagates them to its users.
     # Fresh settings read: no long-lived role/output cache that survives revocation.
     settings = frappe.get_single("SRIAAS Role Permission Settings")
     user = user or frappe.session.user

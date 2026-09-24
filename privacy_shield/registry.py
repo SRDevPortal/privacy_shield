@@ -2,6 +2,7 @@
 DISPLAY_FIELDS = {
     "CRM Lead": {"mobile_no": "mask_mobile", "phone": "mask_phone"},
     "Patient": {"mobile": "mask_mobile", "phone": "mask_phone"},
+    "Clinic Appointment": {"mobile_number": "mask_mobile", "alternate_mobile": "mask_alternate_mobile"},
     "Contact": {"mobile_no": "mask_mobile", "phone": "mask_phone"},
     "Contact Phone": {"phone": "mask_phone"},
     "Patient Encounter": {"sr_pe_mobile": "mask_mobile"},
@@ -14,7 +15,9 @@ DISPLAY_FIELDS = {
 EXTRA_SENSITIVE_FIELDS = {
     "Patient Encounter": ("sr_pe_mobile_norm", "pe_latest_support_response", "pe_latest_support_stage", "pe_latest_support_issue_type"),
     "Sales Invoice": ("si_latest_support_response", "si_latest_support_stage", "si_latest_support_issue_type"),
-    "CRM Lead": ("sr_mobile_norm", "vobiz_mobile_last10", "vobiz_phone_last10"),
+    "CRM Lead": ("sr_mobile_norm", "vobiz_mobile_last10", "vobiz_phone_last10", "vobiz_normalized_phone"),
+    "Patient": ("vobiz_normalized_phone", "vobiz_mobile_last10", "vobiz_phone_last10"),
+    "Customer": ("vobiz_normalized_phone", "vobiz_mobile_last10", "primary_address"),
     "Voice AI Encounter Queue": ("customer_phone",),
     "Vobiz Blocked Number": ("phone_number", "normalized_phone_number", "name"),
     "Chat Contact": ("name",),

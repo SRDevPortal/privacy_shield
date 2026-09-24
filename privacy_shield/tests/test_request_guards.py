@@ -25,7 +25,7 @@ class RequestGuardTests(unittest.TestCase):
 
     def test_v1_aliases_and_mutations(self):
         for prefix in ["/api", "/api/v1"]:
-            for method in ["GET", "PUT", "DELETE", "POST"]:
+            for method in ["PUT", "DELETE", "POST"]:
                 self.check_route(prefix + "/resource/CRM%20Lead/L1", method)
             self.check_route(prefix + "/resource/Patient", "POST")
             self.check_route(prefix + "/resource/Patient")
@@ -62,3 +62,20 @@ class RequestGuardTests(unittest.TestCase):
     def test_full_view_editor_retains_framework_route(self):
         with patch.object(request_guards, "current_capabilities", return_value=Capabilities(True, True)):
             self.check_route("/api/resource/Patient/P1", "PUT", denied=False)
+
+    def test_sdk_preview_reads_are_routed_not_passed_through(self):
+        for prefix in ("/api", "/api/v1"):
+            with patch.object(frappe, "form_dict", {}):
+                self.check_route(prefix + "/resource/Patient/P1", denied=False)
+                self.assertEqual(frappe.form_dict["cmd"], "privacy_shield.rest_preview.read")
+            with patch.object(frappe, "form_dict", {"fields": '["name"]', "order_by":"creation desc", "limit":"1", "as_dict":"true"}):
+                self.check_route(prefix + "/resource/Patient", denied=False)
+                self.assertEqual(frappe.form_dict["cmd"], "privacy_shield.rest_preview.read")
+
+    def test_preview_rejects_additional_arguments_and_phone_queries(self):
+        for changes in ({"fields": '["mobile"]'}, {"filters": '[ ["mobile", "=", "123"] ]'}, {"limit":"0"}, {"order_by":"mobile desc"}, {"cmd":"frappe.client.get"}, {"debug":"1"}):
+            args={"fields": '["name"]', "order_by":"creation desc", "limit":"1", **changes}
+            with patch.object(frappe, "form_dict", args):
+                self.check_route("/api/resource/Patient")
+        with patch.object(frappe, "form_dict", {"run_method":"custom"}):
+            self.check_route("/api/resource/Patient/P1")

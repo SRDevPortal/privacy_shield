@@ -77,3 +77,50 @@ from privacy_shield.raw_access import RAW_DOCTYPES
 has_permission.update({dt: "privacy_shield.raw_access.has_permission" for dt in RAW_DOCTYPES})
 permission_query_conditions.update({dt: "privacy_shield.raw_access.query_condition" for dt in RAW_DOCTYPES})
 before_request.append("privacy_shield.raw_access.guard_request")
+
+# Linked history can contain original phone values and provider prose.
+has_permission.update({dt: "privacy_shield.history_access.has_permission" for dt in ("Comment", "Version", "Communication", "Notification Log", "CRM Notification")})
+permission_query_conditions.update({
+    "Comment": "privacy_shield.history_access.comment_condition",
+    "Version": "privacy_shield.history_access.version_condition",
+    "Communication": "privacy_shield.history_access.communication_condition",
+    "Notification Log": "privacy_shield.history_access.notification_condition",
+    "CRM Notification": "privacy_shield.history_access.crm_notification_condition",
+})
+override_whitelisted_methods.update({
+    "frappe.desk.form.load.get_comments": "privacy_shield.history_access.get_comments",
+    "frappe.desk.form.load.get_communications": "privacy_shield.history_access.get_communications",
+    "frappe.desk.form.load.get_docinfo": "privacy_shield.history_access.get_docinfo",
+})
+
+# Preserve core comment lifecycle; replace only protected room payload delivery.
+override_doctype_class["Comment"] = "privacy_shield.private_comments.PrivacyComment"
+app_include_js = ["/assets/privacy_shield/js/history_refresh.js"]
+
+# Sanitize mention previews before persistence and email side effects.
+doc_events = {
+    "Notification Log": {"before_insert": "privacy_shield.notification_privacy.protect_notification_log"},
+}
+override_whitelisted_methods["frappe.desk.form.utils.add_comment"] = "privacy_shield.comment_actions.add_comment"
+
+override_whitelisted_methods.update({
+    "frappe.desk.doctype.notification_log.notification_log.get_notification_logs": "privacy_shield.notification_reads.get_notification_logs",
+    "frappe.desk.doctype.notification_log.notification_log.mark_as_read": "privacy_shield.notification_reads.mark_as_read",
+    "crm.api.notifications.get_notifications": "sriaas_clinic.api.crm_lead.privacy_notifications.get_notifications",
+    "crm.api.notifications.mark_as_read": "sriaas_clinic.api.crm_lead.privacy_notifications.mark_as_read",
+})
+
+# Raven queries the ORM directly for label-keyed document previews.
+override_whitelisted_methods["raven.api.document_link.get_preview_data"] = "privacy_shield.raven_views.get_preview_data"
+
+# MCP Audit Log uses the RAW_DOCTYPES hooks above, regardless of source.
+
+# This tax download endpoint accepts arbitrary source/field arguments.
+override_whitelisted_methods["india_compliance.gst_india.doctype.gst_return_log.gst_return_log.download_file"] = "privacy_shield.file_outputs.gst_download_file"
+
+# Native bulk printing bypasses the single-document PDF override.
+override_whitelisted_methods.update({
+    "frappe.utils.print_format.download_multi_pdf": "privacy_shield.bulk_print.download_multi_pdf",
+    "frappe.utils.print_format.download_multi_pdf_async": "privacy_shield.bulk_print.download_multi_pdf_async",
+})
+before_job.append("privacy_shield.bulk_print.guard_job")

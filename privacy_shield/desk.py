@@ -8,14 +8,15 @@ import frappe
 from privacy_shield.registry import DISPLAY_FIELDS, EXTRA_SENSITIVE_FIELDS
 from privacy_shield.policy import current_capabilities
 from privacy_shield.projections import project_numbers
-from privacy_shield.guards import preserve_sources
+from privacy_shield.guards import preserve_sources, preserve_derived
 from privacy_shield.child_rows import preserve_contact_rows
+from privacy_shield.activation import CORE_DOCTYPES, enabled_for
 
-SCOPE = frozenset({"CRM Lead", "Patient", "Contact", "Customer", "Address", "Patient Encounter", "Sales Invoice"})
+SCOPE = CORE_DOCTYPES
 
 
 def enabled(doctype):
-    return doctype in SCOPE and bool(frappe.conf.get("privacy_shield_desk_enabled", False))
+    return enabled_for("core_document", doctype)
 
 
 def project_document(payload, capabilities):
@@ -28,8 +29,12 @@ def project_document(payload, capabilities):
         doc["phone_nos"] = [project_numbers(row, {"phone": "mask_phone"}, capabilities.view_full)
                             for row in doc.get("phone_nos", [])]
     if not capabilities.view_full:
+        from privacy_shield.display_text import FIELDS, mask_display
+        redacted = [f for f in FIELDS if f in payload and mask_display(payload[f]) != payload[f]]
         doc.pop("__onload", None)
     doc["__privacy_shield"] = {"view_full": capabilities.view_full, "edit_original": capabilities.edit_original}
+    if not capabilities.view_full and redacted:
+        doc["__privacy_shield"]["masked_display_fields"] = sorted(redacted)
     return doc
 
 
@@ -39,10 +44,12 @@ def prepare_payload(payload, stored, capabilities):
     dt = payload["doctype"]
     if payload.get("name") != stored.get("name") or dt != stored.get("doctype"):
         raise PermissionError("Document identity mismatch")
+    from privacy_shield.display_text import preserve_display
+    payload = preserve_display(payload, stored, capabilities.view_full)
     fields = tuple(DISPLAY_FIELDS[dt])
     result = preserve_sources(payload, stored, fields, capabilities.edit_original)
     # Normalized keys are derived by backend hooks, never editable role grants.
-    result = preserve_sources(result, stored, EXTRA_SENSITIVE_FIELDS.get(dt, ()), False)
+    result = preserve_derived(result, stored, EXTRA_SENSITIVE_FIELDS.get(dt, ()))
     for display in DISPLAY_FIELDS[dt].values():
         result.pop(display, None)
     result.pop("__privacy_shield", None)
@@ -53,6 +60,9 @@ def prepare_payload(payload, stored, capabilities):
             result["phone_nos"] = preserve_contact_rows(payload["phone_nos"], stored.get("phone_nos", []), capabilities.edit_original)
         for row in result["phone_nos"]:
             row.pop("mask_phone", None)
+    if dt == "Clinic Appointment":
+        from privacy_shield.appointment_views import prepare_reference
+        result = prepare_reference(result, stored, capabilities)
     return result
 
 
@@ -78,13 +88,11 @@ def _prepare(doc, capabilities):
 
 
 def _project_response(capabilities):
-    frappe.response["docs"] = [project_document(d.as_dict() if hasattr(d, "as_dict") else d, capabilities)
+    frappe.response["docs"] = [project_document(d.as_dict() if callable(getattr(d, "as_dict", None)) else d, capabilities)
                                for d in frappe.response.get("docs", [])]
     if not capabilities.view_full and frappe.response.get("docinfo"):
-        # Version data includes old and new original values.
-        frappe.response["docinfo"]["versions"] = []
-        # Support integrations copy provider replies into timeline comments.
-        frappe.response["docinfo"]["comments"] = []
+        from privacy_shield.history_access import scrub_docinfo
+        scrub_docinfo(frappe.response["docinfo"])
 
 
 @frappe.whitelist()

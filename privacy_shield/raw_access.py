@@ -4,7 +4,7 @@ import frappe
 RAW_DOCTYPES = frozenset({
     "Shipment Tracking Sync Log", "Shipment Tracking Shipment", "Shipment Tracking Shipment Event",
     "Shipment Tracking Support Ticket", "Payment Provider Event", "Payment Intent Correction Log",
-    "Payment Intent",
+    "Payment Intent", "MCP Audit Log",
 })
 
 

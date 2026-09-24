@@ -99,3 +99,32 @@ class LifecycleTests(unittest.TestCase):
         result=prepare_payload({"doctype":"Patient","name":"P1","flags":{"ignore_validate":True}},stored,Capabilities())
         self.assertNotIn("flags",result)
         self.assertEqual(result["mobile"],"9876543210")
+
+    def test_amendment_restores_only_authorized_cancelled_source_numbers(self):
+        source=MagicMock(docstatus=2)
+        source.as_dict.return_value={"patient":"P1","sr_pe_mobile":"2025550101"}
+        with patch.object(frappe,"get_doc",return_value=source):
+            data={"doctype":"Patient Encounter","amended_from":"E1","patient":"P1"}
+            result=lifecycle.prepare_new(data,Capabilities())
+            self.assertEqual(result["sr_pe_mobile"],"2025550101")
+            self.assertEqual([c.args[0] for c in source.check_permission.call_args_list],["read","amend"])
+            for change in ({"patient":"P2"},{"sr_pe_mobile":"2025550199"}):
+                with self.assertRaises(frappe.PermissionError):
+                    lifecycle.prepare_new({**data,**change},Capabilities())
+            source.docstatus=1
+            with self.assertRaises(frappe.ValidationError):
+                lifecycle.prepare_new(data,Capabilities())
+            source.docstatus=2
+            source.check_permission.side_effect=frappe.PermissionError
+            with self.assertRaises(frappe.PermissionError):
+                lifecycle.prepare_new(data,Capabilities())
+
+    def test_invoice_amendment_preserves_view_only_copy_and_rejects_forgery(self):
+        source=MagicMock(docstatus=2)
+        source.as_dict.return_value={"customer":"C1","contact_mobile":"2025550101"}
+        data={"doctype":"Sales Invoice","amended_from":"I1","customer":"C1","contact_mobile":"2025550101"}
+        with patch.object(frappe,"get_doc",return_value=source):
+            self.assertEqual(lifecycle.prepare_new(data,Capabilities(True,False))["contact_mobile"],"2025550101")
+            for change in ({"customer":"C2"},{"contact_mobile":"2025550199"},{"contact_person":"OTHER"}):
+                with self.assertRaises(frappe.PermissionError):
+                    lifecycle.prepare_new({**data,**change},Capabilities(True,False))

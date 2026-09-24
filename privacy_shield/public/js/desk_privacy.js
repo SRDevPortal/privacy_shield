@@ -1,4 +1,4 @@
-for (const doctype of ['CRM Lead', 'Patient', 'Contact', 'Customer', 'Address', 'Patient Encounter', 'Sales Invoice']) {
+for (const doctype of ['CRM Lead', 'Patient', 'Contact', 'Customer', 'Address', 'Patient Encounter', 'Sales Invoice', 'Clinic Appointment']) {
     frappe.ui.form.on(doctype, {
         refresh(frm) {
             const policy = frm.doc.__privacy_shield;
@@ -6,6 +6,7 @@ for (const doctype of ['CRM Lead', 'Patient', 'Contact', 'Customer', 'Address', 
             const mapping = {
                 'CRM Lead': {mobile_no: 'mask_mobile', phone: 'mask_phone'},
                 'Patient': {mobile: 'mask_mobile', phone: 'mask_phone'},
+                'Clinic Appointment': {mobile_number: 'mask_mobile', alternate_mobile: 'mask_alternate_mobile'},
                 'Contact': {mobile_no: 'mask_mobile', phone: 'mask_phone'},
                 'Customer': {mobile_no: 'mask_mobile'}, 'Address': {phone: 'mask_phone'},
                 'Patient Encounter': {sr_pe_mobile: 'mask_mobile'},
@@ -22,6 +23,16 @@ for (const doctype of ['CRM Lead', 'Patient', 'Contact', 'Customer', 'Address', 
                 frm.toggle_display(display, !policy.view_full);
                 frm.set_df_property(source, 'reqd', policy.view_full ? original.reqd : 0);
                 frm.set_df_property(source, 'read_only', policy.edit_original ? original.read_only : 1);
+            }
+            frm.__privacy_display_readonly ||= {};
+            for (const field of policy.masked_display_fields || []) {
+                if (frm.fields_dict[field] && !(field in frm.__privacy_display_readonly)) {
+                    frm.__privacy_display_readonly[field] = frm.fields_dict[field].df.read_only;
+                }
+            }
+            for (const [field, original] of Object.entries(frm.__privacy_display_readonly)) {
+                frm.set_df_property(field, 'read_only',
+                    (policy.masked_display_fields || []).includes(field) ? 1 : original);
             }
             if (doctype === 'Contact' && frm.fields_dict.phone_nos) {
                 const grid = frm.fields_dict.phone_nos.grid;

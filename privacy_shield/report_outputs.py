@@ -35,8 +35,8 @@ def download_attachment(dn):
 @frappe.whitelist()
 def enqueue_json_to_csv_conversion(prepared_report_name):
     from frappe.core.doctype.prepared_report.prepared_report import enqueue_json_to_csv_conversion as original
-    if restricted():
-        check_prepared(prepared_report_name)
+    if frappe.conf.get("privacy_shield_desk_enabled", False):
+        check_conversion_access(prepared_report_name)
     return original(prepared_report_name)
 
 
@@ -82,6 +82,14 @@ def guard_private_report_file():
         check_attachment_urls([request.path])
 
 
+def check_conversion_access(name):
+    """Number visibility never grants access to an unreadable report."""
+    doc = frappe.get_doc("Prepared Report", name)
+    doc.check_permission("read")
+    if restricted():
+        check_report(doc.report_name)
+
+
 def guard_conversion_job(method=None, kwargs=None, transaction_type=None):
     if not frappe.conf.get("privacy_shield_desk_enabled", False):
         return
@@ -90,5 +98,6 @@ def guard_conversion_job(method=None, kwargs=None, transaction_type=None):
     job = getattr(frappe.local, "job", None)
     if not job or not job.get("user") or job.user != frappe.session.user:
         raise frappe.PermissionError("Prepared conversion requires a recorded job user")
-    if restricted():
-        check_prepared((kwargs or {}).get("prepared_report_name"))
+    if not frappe.db.get_value("User", job.user, "enabled"):
+        raise frappe.PermissionError("Prepared conversion requires an enabled job user")
+    check_conversion_access((kwargs or {}).get("prepared_report_name"))

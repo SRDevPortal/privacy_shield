@@ -70,3 +70,39 @@ class FileOutputTests(unittest.TestCase):
             guard.assert_called_once_with(("/private/files/test.csv",))
         from frappe.core.api.file import zip_files
         zip_files.assert_not_called()
+
+    def test_gst_download_checks_attachment_before_bytes(self):
+        native = "india_compliance.gst_india.doctype.gst_return_log.gst_return_log"
+        file = MagicMock(name="file"); file.name = "F1"
+        with patch(native + ".get_file_doc", return_value=file), patch(native + ".download_file") as original, \
+             patch.object(frappe, "has_permission") as permission, \
+             patch.object(frappe.local, "form_dict", frappe._dict(doctype="Data Import", name="I1", file_field="import_file"), create=True), \
+             patch.object(out, "checked_files", side_effect=frappe.PermissionError):
+            with self.assertRaises(frappe.PermissionError): out.gst_download_file()
+            permission.assert_called_once_with("GST Return Log", "read", throw=True)
+            file.check_permission.assert_called_once_with("read")
+            original.assert_not_called()
+
+    def test_gst_download_text_binary_and_scope_contract(self):
+        native = "india_compliance.gst_india.doctype.gst_return_log.gst_return_log"
+        for restricted in (False, True):
+            for content in ("mobile\n2025550101\n", b"\x1f\x8b\xff\x00"):
+                file = MagicMock(); file.name = "F1"; file.get_content.return_value = content
+                with patch(native + ".get_file_doc", return_value=file), \
+                     patch.object(frappe, "has_permission"), patch.object(out, "checked_files") as checked, \
+                     patch.object(out, "restricted", return_value=restricted), \
+                     patch.object(frappe.local, "form_dict", frappe._dict(file_name="test.gz"), create=True), \
+                     patch.object(frappe.local, "response", frappe._dict(), create=True):
+                    out.gst_download_file()
+                    self.assertEqual(frappe.response.filecontent, content.encode() if isinstance(content,str) else content)
+                    self.assertEqual(frappe.response.filename, "test.gz")
+                    file.get_content.assert_called_once_with()
+                    file.check_permission.assert_called_once_with("read")
+                    self.assertEqual(checked.call_count, int(restricted))
+
+    def test_gst_permission_failure_prevents_read(self):
+        native = "india_compliance.gst_india.doctype.gst_return_log.gst_return_log"
+        with patch.object(frappe, "has_permission", side_effect=frappe.PermissionError), \
+             patch(native + ".get_file_doc") as lookup:
+            with self.assertRaises(frappe.PermissionError): out.gst_download_file()
+            lookup.assert_not_called()
