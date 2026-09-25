@@ -82,3 +82,33 @@ class ListingTests(unittest.TestCase):
              patch("frappe.desk.reportview.get",side_effect=frappe.PermissionError):
             with self.assertRaises(frappe.PermissionError): listing.reportview_get()
             self.assertIs(frappe.local.form_dict,params)
+
+    def test_desk_link_title_uses_selected_link_id_without_join(self):
+        parent = frappe._dict(get_field=lambda field: frappe._dict(fieldtype="Link", options="Patient"))
+        linked = frappe._dict(show_title_field_in_link=1, title_field="patient_name")
+        with patch.object(frappe, "get_meta", side_effect=lambda dt: parent if dt == "Patient Encounter" else linked):
+            fields = ["`tabPatient Encounter`.`name`", "`tabPatient Encounter`.`patient`", "patient.patient_name as patient_patient_name"]
+            self.assertEqual(listing.desk_columns("Patient Encounter", fields), (["name", "patient"], ["name", "patient"]))
+            for bad in ["patient.mobile as patient_mobile", "patient.patient_name as leaked", "patient.patient_name as patient_patient_name, mobile"]:
+                with self.subTest(bad=bad), self.assertRaises(frappe.ValidationError):
+                    listing.desk_columns("Patient Encounter", ["name", "patient", bad])
+            with self.assertRaises(frappe.ValidationError):
+                listing.desk_columns("Patient Encounter", ["name", "patient.patient_name as patient_patient_name"])
+
+    def test_desk_non_link_title_alias_rejected(self):
+        meta = frappe._dict(get_field=lambda field: frappe._dict(fieldtype="Data", options="Patient"))
+        with patch.object(frappe, "get_meta", return_value=meta), self.assertRaises(frappe.ValidationError):
+            listing.desk_columns("Patient Encounter", ["patient", "patient.patient_name as patient_patient_name"])
+
+    def test_desk_title_supplement_removed_before_query_and_masks_retained(self):
+        params = frappe._dict(doctype="Customer", fields=["name", "mobile_no", "customer_primary_contact", "customer_primary_contact.full_name as customer_primary_contact_full_name"], page_length=20)
+        parent = frappe._dict(get_field=lambda field: frappe._dict(fieldtype="Link", options="Contact"))
+        linked = frappe._dict(show_title_field_in_link=1, title_field="full_name")
+        def original():
+            self.assertEqual(frappe.local.form_dict.fields, ["name", "mobile_no", "customer_primary_contact"])
+            return {"keys": ["name", "mobile_no", "customer_primary_contact"], "values": [["C1", "2025550181", "CT1"]]}
+        with patch.object(frappe.local,"form_dict",params,create=True), patch.object(frappe,"form_dict",params), patch.object(frappe,"get_meta",side_effect=lambda dt: parent if dt=="Customer" else linked), patch("frappe.desk.reportview.get",side_effect=original):
+            result = listing.reportview_get()
+            self.assertEqual(result["keys"], ["name", "mask_mobile", "customer_primary_contact"])
+            self.assertEqual(result["values"], [["C1", "******0181", "CT1"]])
+            self.assertIs(frappe.local.form_dict, params)

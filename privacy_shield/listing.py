@@ -153,6 +153,38 @@ def search_link(doctype, txt, query=None, filters=None, page_length=10, searchfi
     return [{"value": row[0], "description": ""} for row in rows]
 
 
+def desk_columns(doctype, fields):
+    """Keep own-table columns; use Desk's ID fallback for linked title labels.
+
+    Frappe adds link.title as link_title for list rendering. Do not query those
+    joined values: they can disclose protected numbers from another DocType.
+    Only discard the exact metadata-declared title supplement, with its Link
+    field already selected. All other aliases still fail normal validation.
+    """
+    prefix = "`tab" + doctype + "`."
+    normalized = [
+        field[len(prefix):].strip("`")
+        if isinstance(field, str) and field.startswith(prefix) else field
+        for field in fields
+    ]
+    selected = []
+    for field in normalized:
+        match = re.fullmatch(
+            r"([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*) as ([A-Za-z_][A-Za-z0-9_]*)",
+            field,
+        ) if isinstance(field, str) else None
+        if match:
+            link, title, alias = match.groups()
+            df = frappe.get_meta(doctype).get_field(link)
+            if (link in normalized and alias == link + "_" + title
+                    and df and df.fieldtype == "Link" and df.options):
+                meta = frappe.get_meta(df.options)
+                if meta.show_title_field_in_link and meta.title_field == title:
+                    continue
+        selected.append(field)
+    return columns(doctype, selected)
+
+
 def _reportview(compressed):
     from frappe.desk import reportview
     original = reportview.get if compressed else reportview.get_list
@@ -163,10 +195,7 @@ def _reportview(compressed):
     if isinstance(fields,str): fields = json.loads(fields)
     # Desk qualifies columns with its own table. Do not accept cross-table fields.
     prefix = "`tab" + doctype + "`."
-    def plain(field):
-        return field[len(prefix):].strip("`") if isinstance(field,str) and field.startswith(prefix) else field
-    fields = [plain(field) for field in (fields or ["name"])]
-    requested, physical = columns(doctype,fields)
+    requested, physical = desk_columns(doctype, fields or ["name"])
     full = current_capabilities().view_full
     order = args.get("order_by")
     if order: order = order.replace(prefix, "").replace("`", "")
