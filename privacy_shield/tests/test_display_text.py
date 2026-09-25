@@ -72,3 +72,15 @@ class DisplayTextTests(unittest.TestCase):
         defaults={'rows':['name','lead_name'],'columns':[],'kanban_fields':[]}
         with self.assertRaises(frappe.PermissionError):
             prepare({'column_field':'lead_name'},False,defaults)
+
+
+class OnloadCompatibilityTests(unittest.TestCase):
+    def test_restricted_onload_is_empty_object_without_original_extras(self):
+        from privacy_shield.desk import project_document
+        from privacy_shield.policy import Capabilities
+        payload = {"doctype": "Patient", "mobile": "2025550181", "__onload": {"private_provider_result": "2025550181"}}
+        result = project_document(payload, Capabilities())
+        self.assertEqual(result["__onload"], {})
+        self.assertNotIn("2025550181", str(result))
+        self.assertTrue(payload["__onload"]["private_provider_result"])
+        self.assertEqual(project_document(payload, Capabilities(True, True))["__onload"], payload["__onload"])

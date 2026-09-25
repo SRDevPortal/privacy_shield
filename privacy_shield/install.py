@@ -26,7 +26,7 @@ def build_fields():
                 options=virtual_expression(source), module="Privacy Shield",
                 no_copy=1, hidden=1, in_list_view=0, allow_on_submit=1,
                 permlevel=meta.get_field(source).permlevel or 0,
-                description="Display only. Visibility enforcement requires completed integration rollout.",
+                description="Number visibility is controlled by your assigned roles.",
             ))
     return fields
 

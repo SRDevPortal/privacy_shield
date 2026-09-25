@@ -31,7 +31,11 @@ def project_document(payload, capabilities):
     if not capabilities.view_full:
         from privacy_shield.display_text import FIELDS, mask_display
         redacted = [f for f in FIELDS if f in payload and mask_display(payload[f]) != payload[f]]
+        # Native address/contact renderers require an object; never forward raw extras.
         doc.pop("__onload", None)
+        if dt in ("Patient", "Customer"):
+            from privacy_shield.contact_cards import project_cards
+            doc["__onload"] = project_cards(payload.get("__onload"))
     doc["__privacy_shield"] = {"view_full": capabilities.view_full, "edit_original": capabilities.edit_original}
     if not capabilities.view_full and redacted:
         doc["__privacy_shield"]["masked_display_fields"] = sorted(redacted)
