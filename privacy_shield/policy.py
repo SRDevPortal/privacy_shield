@@ -5,6 +5,7 @@ from dataclasses import dataclass
 class Capabilities:
     view_full: bool = False
     edit_original: bool = False
+    enter_new_numbers: bool = False
 
 
 def evaluate(roles, rules, user=None):
@@ -18,6 +19,7 @@ def evaluate(roles, rules, user=None):
     return Capabilities(
         any(r.get("view_full") in (1, True, "1") for r in matching),
         any(r.get("edit_original") in (1, True, "1") for r in matching),
+        any(r.get("enter_new_numbers") in (1, True, "1") for r in matching),
     )
 
 

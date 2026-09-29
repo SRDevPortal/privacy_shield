@@ -96,3 +96,32 @@ for (const doctype of ['CRM Lead', 'Patient', 'Contact', 'Customer', 'Address', 
     if (frappe.views?.ListView) install();
     else frappe.require('list.bundle.js', install);
 })();
+
+
+// Unsaved Encounters have no projected document response yet. Initialize their
+// display policy, and refresh the mask whenever the selected Patient changes.
+async function privacy_shield_encounter_context(frm) {
+    const name = frm.doc.name;
+    const patient = frm.doc.patient || '';
+    const response = await frappe.call({
+        method: 'sriaas_clinic.api.patient_intake.get_encounter_context',
+        args: {patient: patient || null}
+    });
+    if (frm.doc.name !== name || (frm.doc.patient || '') !== patient) return;
+    const policy = response.message;
+    if (!policy?.enabled) return;
+    frm.doc.__privacy_shield = {...frm.doc.__privacy_shield,
+        view_full: policy.view_full, edit_original: policy.edit_original};
+    if (!policy.view_full) {
+        delete frm.doc.sr_pe_mobile;
+        frm.doc.mask_mobile = policy.mask_mobile || '';
+        frm.toggle_display('sr_pe_mobile', false);
+        frm.set_df_property('sr_pe_mobile', 'reqd', 0);
+        frm.toggle_display('mask_mobile', true);
+        frm.refresh_field('mask_mobile');
+    }
+}
+frappe.ui.form.on('Patient Encounter', {
+    refresh: privacy_shield_encounter_context,
+    patient: privacy_shield_encounter_context
+});

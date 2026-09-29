@@ -26,6 +26,8 @@ def strip_controls(value):
 def prepare_new(data, capabilities):
     data=strip_controls(payload(data))
     dt=data.get("doctype")
+    source = data.pop("__privacy_source_lead", None)
+    allow_number_entry = capabilities.edit_original or (dt == "Patient" and capabilities.enter_new_numbers and not source)
     amendment_source = {}
     if data.get("amended_from") and dt in ("Patient Encounter", "Sales Invoice"):
         source = frappe.get_doc(dt, data["amended_from"])
@@ -53,10 +55,10 @@ def prepare_new(data, capabilities):
     for key in DISPLAY_FIELDS[dt]:
         if data.get(key) in (None, ""): data.pop(key,None)
     try:
-        data=preserve_sources(data,amendment_source,DISPLAY_FIELDS[dt],capabilities.edit_original)
+        data=preserve_sources(data,amendment_source,DISPLAY_FIELDS[dt],allow_number_entry)
         # Blank placeholders from a new form are not number edits.
     except PermissionError as exc:
-        raise frappe.PermissionError("Entering original numbers requires number-edit permission") from exc
+        raise frappe.PermissionError("Entering original numbers requires number-edit permission or new-patient intake permission") from exc
     except ValueError as exc:
         raise frappe.ValidationError(str(exc)) from exc
     for key in EXTRA_SENSITIVE_FIELDS.get(dt,()):
@@ -84,6 +86,12 @@ def prepare_new(data, capabilities):
             except PermissionError as exc: raise frappe.PermissionError(str(exc)) from exc
             except ValueError as exc: raise frappe.ValidationError(str(exc)) from exc
             row.update(checked);row.pop("mask_phone",None)
+    if dt == "Patient" and source:
+        from privacy_shield.patient_intake import copy_source_numbers
+        data = copy_source_numbers(data, source)
+    if dt == "Patient Encounter":
+        from privacy_shield.patient_intake import resolve_encounter
+        data = resolve_encounter(data, amendment_source, capabilities)
     return data
 
 

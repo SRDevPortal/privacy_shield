@@ -19,8 +19,11 @@ override_whitelisted_methods = {
 # Direct website printing bypasses whitelisted method overrides.
 before_request = [
     "privacy_shield.outputs.guard_printview",
-    "privacy_shield.request_guards.guard_rest",
 ]
+
+# Frappe validates token/OAuth credentials before auth_hooks. before_request
+# runs too early and sees Guest (or the cookie user) for API-token requests.
+auth_hooks = ["privacy_shield.request_guards.guard_rest"]
 
 # Scoped Data Import checks also cover controller-method preview/download calls.
 override_doctype_class = {"Data Import": "privacy_shield.imports.PrivacyDataImport"}
@@ -124,3 +127,9 @@ override_whitelisted_methods.update({
     "frappe.utils.print_format.download_multi_pdf_async": "privacy_shield.bulk_print.download_multi_pdf_async",
 })
 before_job.append("privacy_shield.bulk_print.guard_job")
+
+# Native link fetches and Healthcare autofill call their ORM helpers directly.
+override_whitelisted_methods.update({
+    "frappe.client.validate_link": "privacy_shield.link_fetch.validate_link",
+    "healthcare.healthcare.doctype.patient.patient.get_patient_detail": "privacy_shield.link_fetch.get_patient_detail",
+})

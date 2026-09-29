@@ -45,6 +45,8 @@ def project_document(payload, capabilities):
 def prepare_payload(payload, stored, capabilities):
     from privacy_shield.lifecycle import strip_controls
     payload = strip_controls(payload)
+    if payload.pop("__privacy_source_lead", None):
+        raise PermissionError("Source lead intake is only available when creating a Patient")
     dt = payload["doctype"]
     if payload.get("name") != stored.get("name") or dt != stored.get("doctype"):
         raise PermissionError("Document identity mismatch")
@@ -64,6 +66,9 @@ def prepare_payload(payload, stored, capabilities):
             result["phone_nos"] = preserve_contact_rows(payload["phone_nos"], stored.get("phone_nos", []), capabilities.edit_original)
         for row in result["phone_nos"]:
             row.pop("mask_phone", None)
+    if dt == "Patient Encounter":
+        from privacy_shield.patient_intake import resolve_encounter
+        result = resolve_encounter(result, stored, capabilities)
     if dt == "Clinic Appointment":
         from privacy_shield.appointment_views import prepare_reference
         result = prepare_reference(result, stored, capabilities)

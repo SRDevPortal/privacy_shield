@@ -79,3 +79,59 @@ class RequestGuardTests(unittest.TestCase):
                 self.check_route("/api/resource/Patient")
         with patch.object(frappe, "form_dict", {"run_method":"custom"}):
             self.check_route("/api/resource/Patient/P1")
+
+
+class AuthenticationOrderTests(unittest.TestCase):
+    def test_guard_registered_after_builtin_authentication(self):
+        from privacy_shield import hooks
+        self.assertIn("privacy_shield.request_guards.guard_rest", hooks.auth_hooks)
+        self.assertNotIn("privacy_shield.request_guards.guard_rest", hooks.before_request)
+
+    def authenticate(self, token_user="Administrator", cookie_user="Guest", secret="test-secret"):
+        from frappe.auth import validate_auth
+        from privacy_shield.policy import evaluate
+        from unittest.mock import Mock
+        session = frappe._dict(user=cookie_user)
+        request = Request(EnvironBuilder(path="/api/resource/CRM%20Lead", method="POST").get_environ())
+        def header(name, default=None):
+            if name == "Authorization":
+                return "token test-key:" + secret if token_user else ""
+            return default
+        def set_user(user):
+            session.user = user
+        with patch.object(frappe, "session", session), \
+             patch.object(frappe.local, "login_manager", frappe._dict(user=cookie_user), create=True), \
+             patch.object(frappe.local, "request", request, create=True), \
+             patch.object(frappe.local, "flags", frappe._dict(in_test=True), create=True), \
+             patch.object(frappe.local, "form_dict", {}, create=True), \
+             patch.object(frappe, "conf", {"privacy_shield_desk_enabled": True}), \
+             patch.object(frappe, "get_request_header", side_effect=header), \
+             patch.object(frappe, "db", Mock(get_value=Mock(return_value=token_user))), \
+             patch("frappe.auth.get_decrypted_password", return_value="test-secret"), \
+             patch.object(frappe, "set_user", side_effect=set_user), \
+             patch.object(frappe, "get_installed_apps", return_value=["privacy_shield"]), \
+             patch.object(frappe, "get_hooks", return_value=["privacy_shield.request_guards.guard_rest"]), \
+             patch.object(request_guards, "current_capabilities", side_effect=lambda: evaluate([], [], session.user)):
+            validate_auth()
+            return session.user
+
+    def test_administrator_token_reaches_rest_guard_as_administrator(self):
+        self.assertEqual(self.authenticate(), "Administrator")
+
+    def test_agent_token_remains_restricted(self):
+        with self.assertRaises(frappe.PermissionError):
+            self.authenticate(token_user="agent@example.test")
+
+    def test_invalid_token_fails_authentication(self):
+        with self.assertRaises(frappe.AuthenticationError):
+            self.authenticate(secret="incorrect")
+
+    def test_cookie_identity_uses_native_frappe_precedence(self):
+        with self.assertRaises(frappe.PermissionError):
+            self.authenticate(cookie_user="agent@example.test")
+        self.assertEqual(self.authenticate(token_user="agent@example.test", cookie_user="Administrator"), "Administrator")
+
+    def test_cookie_only_sessions(self):
+        self.assertEqual(self.authenticate(token_user=None, cookie_user="Administrator"), "Administrator")
+        with self.assertRaises(frappe.PermissionError):
+            self.authenticate(token_user=None, cookie_user="agent@example.test")

@@ -2,6 +2,9 @@
 
 Core v1 document reads use the reviewed projection; latest-name lookups accept
 only the fixed SDK query. Other unsupported REST surfaces remain denied.
+Registered as an auth_hook so policy uses Frappe's authenticated identity,
+including its native cookie/token precedence. This hook never authenticates
+or changes users itself.
 """
 import frappe
 from werkzeug.exceptions import HTTPException

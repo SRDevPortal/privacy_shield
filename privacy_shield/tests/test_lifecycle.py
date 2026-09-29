@@ -19,8 +19,11 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(result["mobile"],"9876543210")
 
     def test_blank_new_fields_can_be_resolved_by_backend(self):
-        result=lifecycle.prepare_new({"doctype":"Patient Encounter","sr_pe_mobile":"","patient":"P1"},Capabilities())
-        self.assertNotIn("sr_pe_mobile",result)
+        patient=MagicMock();patient.get.return_value="2025550101"
+        with patch.object(frappe,"get_doc",return_value=patient):
+            result=lifecycle.prepare_new({"doctype":"Patient Encounter","sr_pe_mobile":"","patient":"P1"},Capabilities())
+        self.assertEqual(result["sr_pe_mobile"],"2025550101")
+        patient.check_permission.assert_called_once_with("read")
         self.assertEqual(result["patient"],"P1")
 
     def test_masks_and_derived_keys_rejected(self):
