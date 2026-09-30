@@ -21,6 +21,9 @@ def enabled(doctype):
 
 def project_document(payload, capabilities):
     doc = deepcopy(payload)
+    if getattr(capabilities, "bypass_privacy", False):
+        doc.pop("__privacy_shield", None)
+        return doc
     dt = doc.get("doctype")
     if dt not in SCOPE:
         return doc
@@ -36,7 +39,7 @@ def project_document(payload, capabilities):
         if dt in ("Patient", "Customer"):
             from privacy_shield.contact_cards import project_cards
             doc["__onload"] = project_cards(payload.get("__onload"))
-    doc["__privacy_shield"] = {"view_full": capabilities.view_full, "edit_original": capabilities.edit_original}
+    doc["__privacy_shield"] = {"view_full": capabilities.view_full, "edit_original": capabilities.edit_original, "add_contact_numbers": getattr(capabilities, "add_contact_numbers", False), "change_primary_number": getattr(capabilities, "change_primary_number", False)}
     if not capabilities.view_full and redacted:
         doc["__privacy_shield"]["masked_display_fields"] = sorted(redacted)
     return doc
@@ -45,8 +48,15 @@ def project_document(payload, capabilities):
 def prepare_payload(payload, stored, capabilities):
     from privacy_shield.lifecycle import strip_controls
     payload = strip_controls(payload)
+    if getattr(capabilities, "bypass_privacy", False):
+        return payload
     if payload.pop("__privacy_source_lead", None):
         raise PermissionError("Source lead intake is only available when creating a Patient")
+    from privacy_shield.patient_intake import INTAKE_FIELDS
+    if any(payload.get(field) for field in INTAKE_FIELDS):
+        raise PermissionError("Use Manage Contact Numbers for an existing Patient")
+    for field in INTAKE_FIELDS:
+        payload.pop(field, None)
     dt = payload["doctype"]
     if payload.get("name") != stored.get("name") or dt != stored.get("doctype"):
         raise PermissionError("Document identity mismatch")
@@ -63,9 +73,13 @@ def prepare_payload(payload, stored, capabilities):
         if "phone_nos" not in payload:
             result["phone_nos"] = deepcopy(stored.get("phone_nos", []))
         else:
-            result["phone_nos"] = preserve_contact_rows(payload["phone_nos"], stored.get("phone_nos", []), capabilities.edit_original)
+            result["phone_nos"] = preserve_contact_rows(payload["phone_nos"], stored.get("phone_nos", []), capabilities.edit_original, capabilities.add_contact_numbers, capabilities.change_primary_number)
         for row in result["phone_nos"]:
             row.pop("mask_phone", None)
+    if dt == "Contact" and "phone_nos" in payload:
+        from privacy_shield.contact_numbers import validate_grid_update
+        if validate_grid_update(result, stored):
+            result["__privacy_inline_sync"] = True
     if dt == "Patient Encounter":
         from privacy_shield.patient_intake import resolve_encounter
         result = resolve_encounter(result, stored, capabilities)
@@ -89,7 +103,8 @@ def _prepare(doc, capabilities):
     if not data.get("modified"):
         raise frappe.TimestampMismatchError("Refresh before saving this document")
     try:
-        return prepare_payload(data, stored.as_dict(), capabilities)
+        prepared = prepare_payload(data, stored.as_dict(), capabilities)
+        return prepared
     except PermissionError as exc:
         raise frappe.PermissionError(str(exc)) from exc
     except ValueError as exc:
@@ -180,6 +195,8 @@ def set_value(doctype, name, fieldname, value=None):
     for field in values:
         if field in checked:
             doc.set(field, checked[field])
+    if checked.get("__privacy_inline_sync"):
+        doc.__privacy_inline_sync = True
     doc.save()
     doc.apply_fieldlevel_read_permissions()
     return project_document(doc.as_dict(), capabilities)

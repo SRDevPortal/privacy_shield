@@ -21,7 +21,9 @@ def context(source=None):
     caps = current_capabilities()
     result = {"enabled": True, "view_full": caps.view_full,
               "edit_original": caps.edit_original,
-              "enter_new_numbers": caps.enter_new_numbers}
+              "enter_new_numbers": caps.enter_new_numbers,
+              "add_contact_numbers": caps.add_contact_numbers,
+              "change_primary_number": caps.change_primary_number}
     if source:
         lead = source_lead(source)
         visible = project_document(lead.as_dict(), caps)
@@ -65,3 +67,46 @@ def resolve_encounter(data, stored, capabilities):
     # Re-resolve when changing patient; never retain the previous patient's number.
     data["sr_pe_mobile"] = patient.get("mobile") or ""
     return data
+
+
+INTAKE_FIELDS = ("__privacy_add_mobile", "__privacy_add_phone",
+                 "__privacy_primary_mobile", "__privacy_primary_phone")
+
+
+def capture_contact_additions(doc, method=None):
+    """Validate transient intake controls before native Patient hooks reload it."""
+    from privacy_shield.contact_numbers import normalize
+    caps = current_capabilities()
+    additions = []
+    selected = {}
+    for kind in ("mobile", "phone"):
+        number = doc.get("__privacy_add_" + kind)
+        primary = doc.get("__privacy_primary_" + kind) in (1, True, "1")
+        if number:
+            if not caps.add_contact_numbers:
+                raise frappe.PermissionError("Add Contact Numbers permission is required")
+            if primary and not caps.change_primary_number:
+                raise frappe.PermissionError("Change Primary Number permission is required")
+            value = normalize(number)
+            if value not in additions:
+                additions.append(value)
+            if primary:
+                selected["primary_" + kind] = "@new:" + str(additions.index(value))
+        elif primary:
+            raise frappe.ValidationError("Enter the new number before selecting it as primary")
+    for field in INTAKE_FIELDS:
+        doc.__dict__.pop(field, None)
+    if additions:
+        doc.flags.privacy_contact_additions = (additions, selected)
+
+
+def apply_contact_additions(doc, method=None):
+    pending = doc.flags.pop("privacy_contact_additions", None)
+    if not pending:
+        return
+    from privacy_shield.contact_numbers import load_contact, update
+    contact = load_contact("Patient", doc.name, write=True)
+    additions, selected = pending
+    update("Patient", doc.name, str(contact.modified), additions, **selected)
+    # Return current primary fields through the existing response projection.
+    doc.reload()

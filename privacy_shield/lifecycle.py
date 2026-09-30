@@ -20,7 +20,7 @@ def strip_controls(value):
     if not isinstance(value,dict): return value
     return {key:strip_controls(item) for key,item in value.items()
             if key not in {"flags","ignore_permissions","ignore_links","ignore_mandatory",
-                           "ignore_version","ignore_validate","__privacy_shield"}}
+                           "ignore_version","ignore_validate","__privacy_shield","__privacy_inline_sync"}}
 
 
 def prepare_new(data, capabilities):

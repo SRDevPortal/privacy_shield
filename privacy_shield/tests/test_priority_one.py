@@ -140,7 +140,7 @@ class PriorityOneTests(unittest.TestCase):
             (["System Manager"], "synthetic", Capabilities(True, True)),
             ([], "synthetic", Capabilities()),
             (["System Manager"], "Guest", Capabilities()),
-            ([], "Administrator", Capabilities(True, True)),
+            ([], "Administrator", Capabilities(True, True, True, True, True, True)),
         ):
             with self.subTest(roles=roles, user=user):
                 self.assertEqual(evaluate(roles, rules, user), expected)

@@ -41,6 +41,31 @@ for (const doctype of ['CRM Lead', 'Patient', 'Contact', 'Customer', 'Address', 
                 grid.__privacy_phone_reqd ??= grid.docfields.find(df => df.fieldname === 'phone')?.reqd;
                 grid.update_docfield_property('phone', 'reqd', policy.view_full ? grid.__privacy_phone_reqd : 0);
                 grid.update_docfield_property('mask_phone', 'in_list_view', 1);
+                grid.update_docfield_property('mask_phone', 'label', 'Phone / Mobile');
+                grid.update_docfield_property('mask_phone', 'read_only', 0);
+                grid.cannot_add_rows = !policy.add_contact_numbers;
+                grid.df.cannot_add_rows = !policy.add_contact_numbers;
+                grid.setup_toolbar();
+                if (!grid.__privacy_add_guard) {
+                    const add = grid.add_new_row;
+                    grid.add_new_row = function (...args) {
+                        if (frm.doc.__privacy_shield && !frm.doc.__privacy_shield.add_contact_numbers) return;
+                        return add.apply(this, args);
+                    };
+                    grid.__privacy_add_guard = true;
+                }
+                grid.cannot_delete_rows = !policy.add_contact_numbers;
+                for (const field of ['is_primary_phone', 'is_primary_mobile_no']) {
+                    grid.update_docfield_property(field, 'read_only', !(policy.change_primary_number || policy.edit_original));
+                }
+                if (!frm.__privacy_row_editor) {
+                    frm.__privacy_row_editor = true;
+                    $(frm.wrapper).on('grid-row-render', (event, row) => {
+                        if (row.grid.df.fieldname === 'phone_nos') privacy_contact_row_editor(frm, row);
+                    });
+                }
+                for (const row of grid.grid_rows || []) privacy_contact_row_editor(frm, row);
+
                 // Saved grid layouts still refer to phone. Substitute only the
                 // display column; child row data keeps originals omitted.
                 if (!grid.__privacy_columns_installed) {
@@ -125,3 +150,102 @@ frappe.ui.form.on('Patient Encounter', {
     refresh: privacy_shield_encounter_context,
     patient: privacy_shield_encounter_context
 });
+
+
+function privacy_contact_row_editor(frm, row) {
+    const policy = frm.doc.__privacy_shield;
+    if (!policy || !row.doc) return;
+    privacy_contact_delete_controls(frm, row.grid);
+    row.wrapper.find('.grid-delete-row').toggle(!!row.doc.__islocal && !!policy.add_contact_numbers);
+    if (!row.__privacy_remove_guard) {
+        const remove = row.remove;
+        row.remove = function (...args) {
+            if (frm.doc.__privacy_shield && !this.doc.__islocal) {
+                privacy_contact_delete_notice(this.grid);
+                return;
+            }
+            return remove.apply(this, args);
+        };
+        row.__privacy_remove_guard = true;
+    }
+    // Closed rows have no input controls yet. Set row-local metadata as well
+    // so clicking a saved mask cannot open an editable input later.
+    const editable = {
+        mask_phone: !!row.doc.__islocal && !!policy.add_contact_numbers,
+        phone: row.doc.__islocal ? !!policy.add_contact_numbers : !!policy.edit_original,
+        is_primary_phone: !!(policy.change_primary_number || policy.edit_original),
+        is_primary_mobile_no: !!(policy.change_primary_number || policy.edit_original)
+    };
+    for (const df of row.docfields || []) {
+        if (df.fieldname in editable) df.read_only = editable[df.fieldname] ? 0 : 1;
+    }
+    row.toggle_editable('mask_phone', !!row.doc.__islocal && !!policy.add_contact_numbers);
+    row.toggle_editable('phone', row.doc.__islocal ? !!policy.add_contact_numbers : !!policy.edit_original);
+    for (const field of ['is_primary_phone', 'is_primary_mobile_no']) {
+        row.toggle_editable(field, !!(policy.change_primary_number || policy.edit_original));
+    }
+}
+frappe.ui.form.on('Contact Phone', {
+    before_phone_nos_remove(frm, cdt, cdn) {
+        if (frm.doc.__privacy_shield && !locals[cdt][cdn].__islocal) {
+            privacy_contact_delete_notice(frm.fields_dict.phone_nos.grid);
+            throw new Error('Saved contact number deletion blocked');
+        }
+    },
+    form_render(frm, cdt, cdn) {
+        const row = frm.fields_dict.phone_nos?.grid.grid_rows_by_docname[cdn];
+        if (row) privacy_contact_row_editor(frm, row);
+    },
+    is_primary_phone(frm, cdt, cdn) { privacy_contact_select_primary(frm, cdn, 'is_primary_phone'); },
+    is_primary_mobile_no(frm, cdt, cdn) { privacy_contact_select_primary(frm, cdn, 'is_primary_mobile_no'); }
+});
+function privacy_contact_select_primary(frm, cdn, field) {
+    if (!frm.doc.__privacy_shield) return;
+    const selected = (frm.doc.phone_nos || []).find(row => row.name === cdn);
+    if (!selected?.[field]) return;
+    if (selected.__islocal) {
+        const other = field === 'is_primary_phone' ? 'is_primary_mobile_no' : 'is_primary_phone';
+        if (selected[other]) {
+            frappe.model.set_value(selected.doctype, selected.name, field, 0);
+            frappe.msgprint(__('Choose Primary mobile or Primary phone for a new number, not both.'));
+            return;
+        }
+    }
+    for (const row of frm.doc.phone_nos || []) {
+        if (row.name !== cdn && row[field]) frappe.model.set_value(row.doctype, row.name, field, 0);
+    }
+}
+
+function privacy_contact_delete_notice(grid) {
+    if (grid.__privacy_delete_notice) return;
+    grid.__privacy_delete_notice = true;
+    frappe.show_alert({message: __('Saved numbers cannot be deleted. You can add a number or change its primary selection.'), indicator: 'orange'});
+    setTimeout(() => { grid.__privacy_delete_notice = false; }, 2000);
+}
+function privacy_contact_delete_controls(frm, grid) {
+    if (!grid || grid.__privacy_delete_controls) return;
+    grid.__privacy_delete_controls = true;
+    const refresh = grid.refresh_remove_rows_button;
+    grid.refresh_remove_rows_button = function (...args) {
+        const result = refresh.apply(this, args);
+        if (frm.doc.__privacy_shield) {
+            const selected = this.get_selected_children();
+            this.remove_rows_button.toggleClass('hidden', !selected.length || selected.some(row => !row.__islocal));
+            this.remove_all_rows_button.addClass('hidden');
+        }
+        return result;
+    };
+    for (const method of ['delete_rows', 'delete_all_rows', 'remove_all']) {
+        const original = grid[method];
+        grid[method] = function (...args) {
+            const rows = method === 'delete_rows' ? this.get_selected_children() : (frm.doc.phone_nos || []);
+            if (frm.doc.__privacy_shield && rows.some(row => !row.__islocal)) {
+                privacy_contact_delete_notice(this);
+                return;
+            }
+            return original.apply(this, args);
+        };
+    }
+    grid.wrapper.find('.grid-description').text(__('Saved numbers cannot be deleted. You can add a number or change its primary selection.')).show();
+    grid.refresh_remove_rows_button();
+}
