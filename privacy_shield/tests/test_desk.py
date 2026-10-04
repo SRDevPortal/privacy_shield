@@ -67,6 +67,20 @@ class DeskTests(unittest.TestCase):
         payload = {**stored, "sr_mobile_norm": "1234567890"}
         with self.assertRaises(PermissionError): prepare_payload(payload,stored,Capabilities(True,True))
 
+    def test_patient_appointment_round_trip_masks_and_restores_mobile(self):
+        stored = {"doctype": "Patient Appointment", "name": "APT-1",
+                  "modified": "2026-10-04", "patient": "P1",
+                  "apt_mobile_number": "2025550101", "notes": "Original"}
+        projected = project_document(stored, self.restricted)
+        self.assertNotIn("apt_mobile_number", projected)
+        self.assertEqual(projected["mask_mobile"], "******0101")
+        self.assertNotIn("2025550101", str(projected))
+        projected["notes"] = "Updated"
+        restored = prepare_payload(projected, stored, self.restricted)
+        self.assertEqual(restored["apt_mobile_number"], "2025550101")
+        self.assertNotIn("mask_mobile", restored)
+        self.assertEqual(restored["notes"], "Updated")
+
     def test_wrapper_passes_through_when_disabled(self):
         from privacy_shield.desk import get
         p = patch.object(frappe.local,"flags",frappe._dict(in_test=True),create=True)

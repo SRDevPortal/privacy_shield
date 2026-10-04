@@ -26,6 +26,18 @@ class LifecycleTests(unittest.TestCase):
         patient.check_permission.assert_called_once_with("read")
         self.assertEqual(result["patient"],"P1")
 
+    def test_new_patient_appointment_resolves_mobile_on_server(self):
+        patient = MagicMock()
+        patient.get.return_value = "2025550101"
+        with patch.object(frappe, "get_doc", return_value=patient):
+            result = lifecycle.prepare_new(
+                {"doctype": "Patient Appointment", "patient": "P1",
+                 "apt_mobile_number": "9999999999"},
+                Capabilities(),
+            )
+        self.assertEqual(result["apt_mobile_number"], "2025550101")
+        patient.check_permission.assert_called_once_with("read")
+
     def test_masks_and_derived_keys_rejected(self):
         for data in [{"doctype":"Patient","mobile":"******3210"},
                      {"doctype":"CRM Lead","sr_mobile_norm":"9876543210"}]:

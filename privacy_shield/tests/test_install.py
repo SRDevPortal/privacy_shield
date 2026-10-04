@@ -22,7 +22,7 @@ class InstallTests(unittest.TestCase):
         db = SimpleNamespace(exists=lambda *args: True)
         with patch.object(frappe, "db", db), patch.object(frappe, "get_meta", return_value=meta):
             fields = install.build_fields()
-        self.assertEqual(sum(map(len, fields.values())), 15)
+        self.assertEqual(sum(map(len, fields.values())), 16)
         for rows in fields.values():
             for row in rows:
                 self.assertEqual((row["hidden"], row["read_only"], row["is_virtual"], row["permlevel"]), (1,1,1,2))

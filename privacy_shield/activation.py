@@ -8,7 +8,7 @@ import frappe
 
 CORE_DOCTYPES = frozenset({
     "CRM Lead", "Patient", "Contact", "Customer", "Address",
-    "Patient Encounter", "Sales Invoice", "Clinic Appointment",
+    "Patient Encounter", "Patient Appointment", "Sales Invoice", "Clinic Appointment",
 })
 INSTALLATION_ADAPTERS = frozenset({
     "appointment_patient_details", "support_customer_details",

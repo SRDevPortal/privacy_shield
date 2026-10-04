@@ -43,3 +43,23 @@ def encounter_context(patient=None):
         from privacy_shield.masking import mask_number
         result["mask_mobile"] = mask_number(doc.get("mobile"))
     return result
+
+
+@frappe.whitelist()
+def appointment_context(patient=None):
+    """Return only the display projection needed by an unsaved appointment."""
+    if not enabled("Patient Appointment"):
+        return {"enabled": False}
+    caps = current_capabilities()
+    result = {
+        "enabled": True,
+        "view_full": caps.view_full,
+        "edit_original": caps.edit_original,
+        "mask_mobile": "",
+    }
+    if patient and not caps.view_full:
+        doc = frappe.get_doc("Patient", patient)
+        doc.check_permission("read")
+        from privacy_shield.masking import mask_number
+        result["mask_mobile"] = mask_number(doc.get("mobile"))
+    return result

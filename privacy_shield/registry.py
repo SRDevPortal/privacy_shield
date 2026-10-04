@@ -2,6 +2,7 @@
 DISPLAY_FIELDS = {
     "CRM Lead": {"mobile_no": "mask_mobile", "phone": "mask_phone"},
     "Patient": {"mobile": "mask_mobile", "phone": "mask_phone"},
+    "Patient Appointment": {"apt_mobile_number": "mask_mobile"},
     "Clinic Appointment": {"mobile_number": "mask_mobile", "alternate_mobile": "mask_alternate_mobile"},
     "Contact": {"mobile_no": "mask_mobile", "phone": "mask_phone"},
     "Contact Phone": {"phone": "mask_phone"},

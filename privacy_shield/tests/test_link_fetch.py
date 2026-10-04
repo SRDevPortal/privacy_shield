@@ -62,6 +62,27 @@ class LinkFetchTests(unittest.TestCase):
             self.assertNotIn("2025550101", str(result))
             doc.check_permission.assert_called_once_with("read")
 
+    def test_appointment_context_returns_mask_only_for_restricted_user(self):
+        doc = MagicMock()
+        doc.get.return_value = "2025550101"
+        with patch.object(link_fetch, "enabled", return_value=True), \
+             patch.object(link_fetch, "current_capabilities", return_value=Capabilities()), \
+             patch.object(frappe, "get_doc", return_value=doc):
+            result = link_fetch.appointment_context("P1")
+        self.assertEqual(result["mask_mobile"], "******0101")
+        self.assertNotIn("2025550101", str(result))
+        doc.check_permission.assert_called_once_with("read")
+
+    def test_appointment_context_does_not_read_mobile_for_full_viewer(self):
+        with patch.object(link_fetch, "enabled", return_value=True), \
+             patch.object(link_fetch, "current_capabilities",
+                          return_value=Capabilities(True, False)), \
+             patch.object(frappe, "get_doc") as get_doc:
+            result = link_fetch.appointment_context("P1")
+        self.assertTrue(result["view_full"])
+        self.assertEqual(result["mask_mobile"], "")
+        get_doc.assert_not_called()
+
     def test_direct_child_fetch_is_not_an_escape_route(self):
         with patch.object(link_fetch, "enabled", return_value=True):
             with self.assertRaises(frappe.PermissionError):

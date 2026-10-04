@@ -38,6 +38,7 @@ class FoundationTests(unittest.TestCase):
     def test_phone_mobile_are_distinct(self):
         self.assertEqual(DISPLAY_FIELDS["Contact"], {"mobile_no": "mask_mobile", "phone": "mask_phone"})
         self.assertEqual(DISPLAY_FIELDS["Contact Phone"], {"phone": "mask_phone"})
+        self.assertEqual(DISPLAY_FIELDS["Patient Appointment"], {"apt_mobile_number": "mask_mobile"})
 
     def test_virtual_expression_in_frappe(self):
         from frappe.utils.safe_exec import safe_eval, get_python_builtins

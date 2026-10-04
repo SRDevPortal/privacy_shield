@@ -1,4 +1,4 @@
-for (const doctype of ['CRM Lead', 'Patient', 'Contact', 'Customer', 'Address', 'Patient Encounter', 'Sales Invoice', 'Clinic Appointment']) {
+for (const doctype of ['CRM Lead', 'Patient', 'Contact', 'Customer', 'Address', 'Patient Encounter', 'Patient Appointment', 'Sales Invoice', 'Clinic Appointment']) {
     frappe.ui.form.on(doctype, {
         refresh(frm) {
             const policy = frm.doc.__privacy_shield;
@@ -7,6 +7,7 @@ for (const doctype of ['CRM Lead', 'Patient', 'Contact', 'Customer', 'Address', 
                 'CRM Lead': {mobile_no: 'mask_mobile', phone: 'mask_phone'},
                 'Patient': {mobile: 'mask_mobile', phone: 'mask_phone'},
                 'Clinic Appointment': {mobile_number: 'mask_mobile', alternate_mobile: 'mask_alternate_mobile'},
+                'Patient Appointment': {apt_mobile_number: 'mask_mobile'},
                 'Contact': {mobile_no: 'mask_mobile', phone: 'mask_phone'},
                 'Customer': {mobile_no: 'mask_mobile'}, 'Address': {phone: 'mask_phone'},
                 'Patient Encounter': {sr_pe_mobile: 'mask_mobile'},
@@ -98,6 +99,7 @@ for (const doctype of ['CRM Lead', 'Patient', 'Contact', 'Customer', 'Address', 
         'CRM Lead': {mobile_no: 'mask_mobile', phone: 'mask_phone'},
         Patient: {mobile: 'mask_mobile', phone: 'mask_phone'},
         Contact: {mobile_no: 'mask_mobile', phone: 'mask_phone'},
+        'Patient Appointment': {apt_mobile_number: 'mask_mobile'},
         Customer: {mobile_no: 'mask_mobile'}, Address: {phone: 'mask_phone'},
         'Patient Encounter': {sr_pe_mobile: 'mask_mobile'},
         'Sales Invoice': {contact_mobile: 'mask_mobile'},
@@ -149,6 +151,38 @@ async function privacy_shield_encounter_context(frm) {
 frappe.ui.form.on('Patient Encounter', {
     refresh: privacy_shield_encounter_context,
     patient: privacy_shield_encounter_context
+});
+
+
+async function privacy_shield_appointment_context(frm) {
+    if (!frm.doc.__islocal) return;
+    const name = frm.doc.name;
+    const patient = frm.doc.patient || '';
+    const response = await frappe.call({
+        method: 'privacy_shield.link_fetch.appointment_context',
+        args: {patient: patient || null}
+    });
+    if (frm.doc.name !== name || (frm.doc.patient || '') !== patient) return;
+    const policy = response.message;
+    if (!policy?.enabled) return;
+    frm.doc.__privacy_shield = {...frm.doc.__privacy_shield,
+        view_full: policy.view_full, edit_original: policy.edit_original};
+    if (!policy.view_full) {
+        delete frm.doc.apt_mobile_number;
+        frm.doc.mask_mobile = policy.mask_mobile || '';
+        frm.toggle_display('apt_mobile_number', false);
+        frm.set_df_property('apt_mobile_number', 'reqd', 0);
+        frm.toggle_display('mask_mobile', true);
+        frm.refresh_field('apt_mobile_number');
+        frm.refresh_field('mask_mobile');
+    } else {
+        frm.toggle_display('apt_mobile_number', true);
+        frm.toggle_display('mask_mobile', false);
+    }
+}
+frappe.ui.form.on('Patient Appointment', {
+    refresh: privacy_shield_appointment_context,
+    patient: privacy_shield_appointment_context
 });
 
 
