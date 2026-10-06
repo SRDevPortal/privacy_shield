@@ -138,7 +138,7 @@ class PriorityOneTests(unittest.TestCase):
             (["Agent"], "synthetic", Capabilities()),
             (["Agent", "Team Leader"], "synthetic", Capabilities(True, False)),
             (["System Manager"], "synthetic", Capabilities(True, True)),
-            ([], "synthetic", Capabilities()),
+            ([], "synthetic", Capabilities(True, False)),
             (["System Manager"], "Guest", Capabilities()),
             ([], "Administrator", Capabilities(True, True, True, True, True, True)),
         ):
@@ -146,7 +146,8 @@ class PriorityOneTests(unittest.TestCase):
                 self.assertEqual(evaluate(roles, rules, user), expected)
 
     def test_capabilities_reread_effective_roles_and_rules_after_revocation(self):
-        rules = [{"role": "Profile Viewer", "view_full": 1, "edit_original": 0}]
+        rules = [{"role": "Agent", "view_full": 0},
+                 {"role": "Profile Viewer", "view_full": 1, "edit_original": 0}]
         settings = SimpleNamespace(get=lambda key: rules)
         with patch.object(frappe, "get_single", return_value=settings) as reader, \
              patch.object(frappe, "get_roles", side_effect=[
@@ -155,7 +156,7 @@ class PriorityOneTests(unittest.TestCase):
             self.assertEqual(current_capabilities("synthetic"), Capabilities(True, False))
             self.assertEqual(current_capabilities("synthetic"), Capabilities())
             rules.clear()
-            self.assertEqual(current_capabilities("synthetic"), Capabilities())
+            self.assertEqual(current_capabilities("synthetic"), Capabilities(True, False))
             self.assertEqual(reader.call_count, 3)
             self.assertEqual(role_reader.call_count, 3)
 

@@ -91,6 +91,7 @@ class CRMViewTests(unittest.TestCase):
     def test_dedupe_filters_remain_in_the_call_chain(self):
         with patch.object(frappe.local,"flags",frappe._dict(in_test=True),create=True), \
              patch.object(adapter,"enabled",return_value=False), \
+             patch.object(frappe,"conf",{}), \
              patch.object(frappe,"get_installed_apps",return_value=["crm_lead_dedupe"]), \
              patch("crm_lead_dedupe.api.crm_doc_guard.is_enabled",return_value=True), \
              patch("crm_lead_dedupe.api.crm_doc_guard.crm_get_data",return_value=self.payload) as original:

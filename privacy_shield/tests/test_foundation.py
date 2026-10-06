@@ -14,13 +14,48 @@ class FoundationTests(unittest.TestCase):
 
     def test_roles(self):
         rules = [{"role": "Viewer", "view_full": 1}, {"role": "Editor", "edit_original": 1}]
-        self.assertFalse(evaluate(["System Manager"], [], "manager").view_full)
+        self.assertTrue(evaluate(["System Manager"], [], "manager").view_full)
         self.assertTrue(evaluate(["Agent", "Viewer"], rules, "user").view_full)
         self.assertFalse(evaluate(["Viewer"], rules, "user").edit_original)
         self.assertTrue(evaluate(["Editor"], rules, "user").edit_original)
         self.assertFalse(evaluate(["Viewer"], rules, "Guest").view_full)
         self.assertTrue(evaluate([], [], "Administrator").view_full)
-        self.assertFalse(evaluate(["Viewer"], [], "user").view_full)
+        self.assertTrue(evaluate(["Viewer"], [], "user").view_full)
+
+    def test_only_listed_roles_are_masked(self):
+        rules = [{"role": "Agent", "view_full": 0},
+                 {"role": "Viewer", "view_full": 1}]
+        for roles, full in [(["Repeat Agent"], True), (["Agent"], False),
+                            (["Viewer"], True), (["Repeat Agent", "Agent"], False),
+                            (["Repeat Agent", "Agent", "Viewer"], True)]:
+            with self.subTest(roles=roles):
+                caps = evaluate(roles, rules, "staff")
+                self.assertEqual(caps.view_full, full)
+                self.assertFalse(caps.edit_original)
+                self.assertFalse(caps.enter_new_numbers)
+                self.assertFalse(caps.add_contact_numbers)
+                self.assertFalse(caps.change_primary_number)
+                self.assertFalse(caps.bypass_privacy)
+
+    def test_unlisted_guest_does_not_receive_full_visibility(self):
+        for user in (None, "Guest"):
+            self.assertFalse(evaluate(["Repeat Agent"], [], user).view_full)
+
+    def test_role_visibility_reaches_patient_list_and_form(self):
+        from privacy_shield.listing import project_rows
+        from privacy_shield.desk import project_document
+        rules = [{"role": "Agent", "view_full": 0}, {"role": "Viewer", "view_full": 1}]
+        for role, full in [("Repeat Agent", True), ("Agent", False), ("Viewer", True)]:
+            with self.subTest(role=role):
+                caps = evaluate([role], rules, "staff")
+                expected = "9876543210" if full else "******3210"
+                key = "mobile" if full else "mask_mobile"
+                rows = project_rows("Patient", [{"mobile": "9876543210"}],
+                                    ["mobile"], ["mobile"], caps.view_full)
+                self.assertEqual(rows[0][key], expected)
+                doc = project_document({"doctype": "Patient", "mobile": "9876543210"}, caps)
+                self.assertEqual(doc[key], expected)
+                self.assertEqual(doc["__privacy_shield"]["view_full"], full)
 
     def test_save_boundary(self):
         stored = {"mobile_no": "9876543210"}

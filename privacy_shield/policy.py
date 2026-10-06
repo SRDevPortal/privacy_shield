@@ -20,7 +20,8 @@ def evaluate(roles, rules, user=None):
     roles = set(roles)
     matching = [r for r in rules if r.get("role") in roles]
     return Capabilities(
-        any(r.get("view_full") in (1, True, "1") for r in matching),
+        # Only users with a listed effective role are subject to number masking.
+        not matching or any(r.get("view_full") in (1, True, "1") for r in matching),
         any(r.get("edit_original") in (1, True, "1") for r in matching),
         any(r.get("enter_new_numbers") in (1, True, "1") for r in matching),
         any(r.get("add_contact_numbers") in (1, True, "1") for r in matching),
