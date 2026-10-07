@@ -92,3 +92,25 @@ class PatientIntakeTests(unittest.TestCase):
             patient.check_permission.side_effect = frappe.PermissionError
             with self.assertRaises(frappe.PermissionError):
                 lifecycle.prepare_new({"doctype": "Patient Encounter", "patient": "P2"}, Capabilities())
+
+    def test_new_encounter_accepts_unchanged_fetched_patient_mobile(self):
+        patient = MagicMock()
+        patient.get.side_effect = {"mobile": "2025550199"}.get
+        with patch.object(frappe, "get_doc", return_value=patient):
+            for caps in (Capabilities(), Capabilities(view_full=True)):
+                result = lifecycle.prepare_new({"doctype": "Patient Encounter", "patient": "P2",
+                    "sr_pe_mobile": "2025550199"}, caps)
+                self.assertEqual(result["sr_pe_mobile"], "2025550199")
+        patient.check_permission.assert_called_with("read")
+
+    def test_new_encounter_cannot_override_or_copy_inaccessible_patient_mobile(self):
+        patient = MagicMock()
+        patient.get.side_effect = {"mobile": "2025550199"}.get
+        with patch.object(frappe, "get_doc", return_value=patient):
+            with self.assertRaises(frappe.PermissionError):
+                lifecycle.prepare_new({"doctype": "Patient Encounter", "patient": "P2",
+                    "sr_pe_mobile": "2025550101"}, Capabilities(view_full=True))
+            patient.check_permission.side_effect = frappe.PermissionError
+            with self.assertRaises(frappe.PermissionError):
+                lifecycle.prepare_new({"doctype": "Patient Encounter", "patient": "P2",
+                    "sr_pe_mobile": "2025550199"}, Capabilities(view_full=True))

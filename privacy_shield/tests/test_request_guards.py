@@ -111,7 +111,7 @@ class AuthenticationOrderTests(unittest.TestCase):
              patch.object(frappe, "set_user", side_effect=set_user), \
              patch.object(frappe, "get_installed_apps", return_value=["privacy_shield"]), \
              patch.object(frappe, "get_hooks", return_value=["privacy_shield.request_guards.guard_rest"]), \
-             patch.object(request_guards, "current_capabilities", side_effect=lambda: evaluate([], [], session.user)):
+             patch.object(request_guards, "current_capabilities", side_effect=lambda: evaluate(["Agent"], [{"role": "Agent"}], session.user)):
             validate_auth()
             return session.user
 

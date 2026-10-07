@@ -31,11 +31,12 @@ class FoundationTests(unittest.TestCase):
             with self.subTest(roles=roles):
                 caps = evaluate(roles, rules, "staff")
                 self.assertEqual(caps.view_full, full)
-                self.assertFalse(caps.edit_original)
-                self.assertFalse(caps.enter_new_numbers)
-                self.assertFalse(caps.add_contact_numbers)
-                self.assertFalse(caps.change_primary_number)
-                self.assertFalse(caps.bypass_privacy)
+                unlisted = not any(rule["role"] in roles for rule in rules)
+                self.assertEqual(caps.edit_original, unlisted)
+                self.assertEqual(caps.enter_new_numbers, unlisted)
+                self.assertEqual(caps.add_contact_numbers, unlisted)
+                self.assertEqual(caps.change_primary_number, unlisted)
+                self.assertEqual(caps.bypass_privacy, unlisted)
 
     def test_unlisted_guest_does_not_receive_full_visibility(self):
         for user in (None, "Guest"):
@@ -55,7 +56,10 @@ class FoundationTests(unittest.TestCase):
                 self.assertEqual(rows[0][key], expected)
                 doc = project_document({"doctype": "Patient", "mobile": "9876543210"}, caps)
                 self.assertEqual(doc[key], expected)
-                self.assertEqual(doc["__privacy_shield"]["view_full"], full)
+                if caps.bypass_privacy:
+                    self.assertNotIn("__privacy_shield", doc)
+                else:
+                    self.assertEqual(doc["__privacy_shield"]["view_full"], full)
 
     def test_save_boundary(self):
         stored = {"mobile_no": "9876543210"}
@@ -81,3 +85,14 @@ class FoundationTests(unittest.TestCase):
         for value in ["9876543210 1234567890", None, "", "12", "1234", "9876543210", "+91 (98765) 43210", "123/456", "---"]:
             with self.subTest(value=value):
                 self.assertEqual(safe_eval(virtual_expression("phone"), eval_globals=globals_for_virtual.copy(), eval_locals={"doc": {"phone": value}}), mask_number(value))
+
+    def test_unlisted_users_keep_native_contact_and_encounter_edits(self):
+        from privacy_shield.desk import prepare_payload
+        from privacy_shield.lifecycle import prepare_new
+        caps = evaluate(["Repeat Agent"], [{"role": "Agent"}], "staff")
+        stored = {"doctype": "Contact", "name": "C1", "phone_nos": [
+            {"name": "R1", "phone": "2025550101"}]}
+        self.assertEqual(prepare_payload({"doctype": "Contact", "name": "C1", "phone_nos": []}, stored, caps)["phone_nos"], [])
+        data = {"doctype": "Patient Encounter", "sr_pe_mobile": "2025550199"}
+        self.assertEqual(prepare_new(data, caps), data)
+        self.assertNotIn("ignore_permissions", prepare_new({**data, "ignore_permissions": True}, caps))

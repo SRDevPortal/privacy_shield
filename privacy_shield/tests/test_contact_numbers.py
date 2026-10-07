@@ -105,7 +105,7 @@ class ContactNumberTests(unittest.TestCase):
         submitted = dict(stored, phone_nos=[])
         self.assertEqual(prepare_payload(submitted, stored, caps)['phone_nos'], [])
         self.assertNotIn('__privacy_shield', project_document(stored, caps))
-        self.assertFalse(evaluate(['System Manager'], [], 'manager').bypass_privacy)
+        self.assertFalse(evaluate(['System Manager'], [{'role': 'System Manager'}], 'manager').bypass_privacy)
 
     def test_administrator_can_use_both_primary_types(self):
         result = plan_rows(self.rows, ['9876501235'], '@new:0', '@new:0', evaluate([], [], 'Administrator'))

@@ -26,6 +26,8 @@ def strip_controls(value):
 def prepare_new(data, capabilities):
     data=strip_controls(payload(data))
     dt=data.get("doctype")
+    if capabilities.bypass_privacy and not data.get("__privacy_source_lead"):
+        return data
     source = data.pop("__privacy_source_lead", None)
     allow_number_entry = (capabilities.edit_original or dt == "Patient Appointment"
                           or (dt == "Patient" and capabilities.enter_new_numbers and not source))
@@ -55,8 +57,15 @@ def prepare_new(data, capabilities):
         raise frappe.ValidationError(str(exc)) from exc
     for key in DISPLAY_FIELDS[dt]:
         if data.get(key) in (None, ""): data.pop(key,None)
+    number_sources = amendment_source
+    if dt == "Patient Encounter" and not data.get("amended_from") and not capabilities.edit_original and data.get("patient") and data.get("sr_pe_mobile"):
+        # Native fetch_from sends the selected Patient's unchanged mobile on a
+        # new Encounter. Copying an accessible source is not number editing.
+        patient = frappe.get_doc("Patient", data["patient"])
+        patient.check_permission("read")
+        number_sources = {"sr_pe_mobile": patient.get("mobile") or ""}
     try:
-        data=preserve_sources(data,amendment_source,DISPLAY_FIELDS[dt],allow_number_entry)
+        data=preserve_sources(data,number_sources,DISPLAY_FIELDS[dt],allow_number_entry)
         # Blank placeholders from a new form are not number edits.
     except PermissionError as exc:
         raise frappe.PermissionError("Entering original numbers requires number-edit permission or new-patient intake permission") from exc

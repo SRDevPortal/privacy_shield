@@ -138,7 +138,7 @@ class PriorityOneTests(unittest.TestCase):
             (["Agent"], "synthetic", Capabilities()),
             (["Agent", "Team Leader"], "synthetic", Capabilities(True, False)),
             (["System Manager"], "synthetic", Capabilities(True, True)),
-            ([], "synthetic", Capabilities(True, False)),
+            ([], "synthetic", Capabilities(True, True, True, True, True, True)),
             (["System Manager"], "Guest", Capabilities()),
             ([], "Administrator", Capabilities(True, True, True, True, True, True)),
         ):
@@ -156,7 +156,7 @@ class PriorityOneTests(unittest.TestCase):
             self.assertEqual(current_capabilities("synthetic"), Capabilities(True, False))
             self.assertEqual(current_capabilities("synthetic"), Capabilities())
             rules.clear()
-            self.assertEqual(current_capabilities("synthetic"), Capabilities(True, False))
+            self.assertEqual(current_capabilities("synthetic"), Capabilities(True, True, True, True, True, True))
             self.assertEqual(reader.call_count, 3)
             self.assertEqual(role_reader.call_count, 3)
 
