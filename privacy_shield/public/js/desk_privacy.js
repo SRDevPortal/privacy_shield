@@ -131,7 +131,7 @@ async function privacy_shield_encounter_context(frm) {
     const name = frm.doc.name;
     const patient = frm.doc.patient || '';
     const response = await frappe.call({
-        method: 'sriaas_clinic.api.patient_intake.get_encounter_context',
+        method: 'privacy_shield.clinic.get_encounter_context',
         args: {patient: patient || null}
     });
     if (frm.doc.name !== name || (frm.doc.patient || '') !== patient) return;

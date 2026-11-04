@@ -152,7 +152,8 @@ def load_context(name):
 
 
 def render(context):
-    template=Path(frappe.get_app_path('sriaas_clinic','print_formats','privacy_kit_invoice_preview.html')).read_text()
+    from privacy_shield.clinic import template_path
+    template=Path(template_path('kit_invoice_preview')).read_text()
     env=SandboxedEnvironment(autoescape=True,undefined=StrictUndefined)
     env.globals.clear()
     return env.from_string(template).render(invoice=context)

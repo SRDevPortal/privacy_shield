@@ -18,6 +18,13 @@ def fixture():
 GROUPS={'KIT-A':'MEDICINES','SERVICE-A':'NON KIT ITEMS'}
 
 class KitInvoicePreviewTests(unittest.TestCase):
+    def setUp(self):
+        # Rendering now uses the site-selected clinic rather than a hardcoded app.
+        for item in [patch.object(frappe, "get_hooks", return_value=["sriaas_clinic.privacy_adapter"]),
+                     patch.object(frappe, "get_installed_apps", return_value=["sriaas_clinic"])]:
+            item.start()
+            self.addCleanup(item.stop)
+
     def test_masks_without_mutating_source(self):
         doc=fixture();before=deepcopy(doc);ctx=project(doc,{'mobile_no':'2025550182'},GROUPS)
         self.assertEqual(ctx['mobile'],'******0181');self.assertEqual(doc,before)

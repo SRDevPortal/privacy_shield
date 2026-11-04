@@ -13,7 +13,7 @@ after_migrate = "privacy_shield.install.sync_fields"
 # Installed after dedupe: route into the clinic-owned adapter, which explicitly
 # delegates through dedupe's active-lead guard before calling CRM.
 override_whitelisted_methods = {
-    "crm.api.doc.get_data": "sriaas_clinic.api.crm_lead.privacy_views.get_data",
+    "crm.api.doc.get_data": "privacy_shield.clinic.crm_get_data",
 }
 
 # Direct website printing bypasses whitelisted method overrides.
@@ -109,8 +109,8 @@ override_whitelisted_methods["frappe.desk.form.utils.add_comment"] = "privacy_sh
 override_whitelisted_methods.update({
     "frappe.desk.doctype.notification_log.notification_log.get_notification_logs": "privacy_shield.notification_reads.get_notification_logs",
     "frappe.desk.doctype.notification_log.notification_log.mark_as_read": "privacy_shield.notification_reads.mark_as_read",
-    "crm.api.notifications.get_notifications": "sriaas_clinic.api.crm_lead.privacy_notifications.get_notifications",
-    "crm.api.notifications.mark_as_read": "sriaas_clinic.api.crm_lead.privacy_notifications.mark_as_read",
+    "crm.api.notifications.get_notifications": "privacy_shield.clinic.crm_get_notifications",
+    "crm.api.notifications.mark_as_read": "privacy_shield.clinic.crm_mark_as_read",
 })
 
 # Raven queries the ORM directly for label-keyed document previews.
