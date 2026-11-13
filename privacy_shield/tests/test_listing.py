@@ -112,3 +112,58 @@ class ListingTests(unittest.TestCase):
             self.assertEqual(result["keys"], ["name", "mask_mobile", "customer_primary_contact"])
             self.assertEqual(result["values"], [["C1", "******0181", "CT1"]])
             self.assertIs(frappe.local.form_dict, params)
+
+    def test_native_desk_page_sizes_preserve_masks_and_pagination_for_both_endpoints(self):
+        for compressed in (True, False):
+            for full in (False, True):
+                for size in (20, 100, 500, 2500):
+                    with self.subTest(compressed=compressed, full=full, size=size):
+                        params = frappe._dict(doctype="CRM Lead", fields=["name", "mobile_no"],
+                                             page_length=size, start=size, filters=[["status", "=", "New"]],
+                                             order_by="creation desc")
+                        rows = [{"name": f"L{i}", "mobile_no": "9876543210"} for i in range(size)]
+                        response = {"keys": ["name", "mobile_no"], "values": [[r["name"], r["mobile_no"]] for r in rows]} if compressed else rows
+                        def original():
+                            args = frappe.local.form_dict
+                            self.assertEqual(args.page_length, size)
+                            self.assertEqual(args.start, size)
+                            self.assertEqual(args.filters, params.filters)
+                            self.assertEqual(args.order_by, "creation desc")
+                            self.assertFalse(args.debug)
+                            return response
+                        endpoint = "frappe.desk.reportview.get" if compressed else "frappe.desk.reportview.get_list"
+                        with patch.object(frappe.local, "form_dict", params, create=True), \
+                             patch.object(frappe, "form_dict", params), \
+                             patch.object(listing, "current_capabilities", return_value=Capabilities(view_full=full)), \
+                             patch(endpoint, side_effect=original):
+                            result = listing._reportview(compressed)
+                            output = [dict(zip(result["keys"], row)) for row in result["values"]] if compressed else result
+                            self.assertEqual(len(output), size)
+                            key = "mobile_no" if full else "mask_mobile"
+                            self.assertEqual(output[-1][key], "9876543210" if full else "******3210")
+                            if not full:
+                                self.assertNotIn("9876543210", str(result))
+                            self.assertIs(frappe.local.form_dict, params)
+                            self.assertEqual(rows[-1]["mobile_no"], "9876543210")
+
+    def test_invalid_desk_page_sizes_rejected_before_query(self):
+        for size in (0, -1, 2501, "invalid"):
+            for compressed in (True, False):
+                params = frappe._dict(doctype="Patient", fields=["name"], page_length=size)
+                endpoint = "frappe.desk.reportview.get" if compressed else "frappe.desk.reportview.get_list"
+                with self.subTest(size=size, compressed=compressed), \
+                     patch.object(frappe, "form_dict", params), patch(endpoint) as query:
+                    with self.assertRaises(frappe.ValidationError):
+                        listing._reportview(compressed)
+                    query.assert_not_called()
+
+    def test_generic_api_and_link_search_keep_existing_limit(self):
+        for size in (201, 500, 2500):
+            with self.subTest(size=size), patch("frappe.client.get_list") as query:
+                with self.assertRaises(frappe.ValidationError):
+                    listing.get_list("Patient", ["name"], limit_page_length=size)
+                query.assert_not_called()
+            with patch.object(frappe, "get_hooks", return_value={}), patch("frappe.desk.search.search_widget") as query:
+                with self.assertRaises(frappe.ValidationError):
+                    listing.search_widget("Patient", "PAT", page_length=size)
+                query.assert_not_called()

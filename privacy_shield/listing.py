@@ -14,6 +14,10 @@ from privacy_shield.registry import DISPLAY_FIELDS, EXTRA_SENSITIVE_FIELDS
 from privacy_shield.masking import mask_number
 
 
+# Match native Desk pagination without widening API or Link-search limits.
+DESK_MAX_PAGE_LENGTH = 2500
+
+
 def columns(doctype, fields):
     if isinstance(fields, str):
         try: fields = json.loads(fields)
@@ -201,7 +205,10 @@ def _reportview(compressed):
     if order: order = order.replace(prefix, "").replace("`", "")
     validate_query(doctype,args.get("filters"),args.get("or_filters"),args.get("group_by"),order,full)
     limit = cint(args.get("page_length",20))
-    if not 1 <= limit <= 200: raise frappe.ValidationError("Privacy pilot page size must be between 1 and 200")
+    if not 1 <= limit <= DESK_MAX_PAGE_LENGTH:
+        raise frappe.ValidationError(
+            f"Privacy list page size must be between 1 and {DESK_MAX_PAGE_LENGTH}"
+        )
     args.update(fields=physical,order_by=order,page_length=limit,debug=False)
     previous = frappe.local.form_dict
     try:
